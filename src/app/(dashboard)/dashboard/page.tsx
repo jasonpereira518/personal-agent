@@ -1,8 +1,8 @@
 import { Greeting } from "@/components/shared/greeting"
 import { GlassCard } from "@/components/shared/glass-card"
 import { SemesterWeek } from "@/components/shared/semester-week"
+import { TodayFocusCard } from "@/components/modules/tasks/today-focus-card"
 import {
-  Target,
   Clock,
   Repeat,
   Inbox,
@@ -32,16 +32,7 @@ export default function DashboardPage() {
 
       {/* ── Row 2: Left column (4 cols) ─────────────────────────── */}
       <div className="col-span-4 flex flex-col gap-6">
-        <GlassCard
-          title="Today's Focus"
-          icon={<Target className={ic} />}
-          phase={2}
-          index={0}
-        >
-          <p className="text-xs text-muted-foreground">
-            The 3 most important tasks for today, starred from your task list.
-          </p>
-        </GlassCard>
+        <TodayFocusCard />
 
         <GlassCard
           title="Next Up"

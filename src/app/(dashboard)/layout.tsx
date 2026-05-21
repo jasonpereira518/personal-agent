@@ -1,10 +1,15 @@
 import { SidebarNav } from "@/components/shared/sidebar-nav"
+import { Toaster } from "@/components/ui/sonner"
+import { runSeedIfNeeded } from "@/lib/seed/run-seed-action"
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // No-op after first run; idempotent seed check
+  await runSeedIfNeeded()
+
   return (
     <div className="relative min-h-screen">
       {/* Radial gradient background */}
@@ -15,9 +20,9 @@ export default function DashboardLayout({
 
       <SidebarNav />
 
-      <main className="ml-60 min-h-screen p-6">
-        {children}
-      </main>
+      <main className="ml-60 min-h-screen p-6">{children}</main>
+
+      <Toaster richColors position="bottom-right" />
     </div>
   )
 }
