@@ -1,17 +1,11 @@
 -- ============================================================
 -- Personal OS — Initial Schema
 -- All user_id columns store Clerk user IDs (TEXT, e.g. user_2abc…)
--- RLS uses auth.jwt() ->> 'sub' which equals the Clerk user ID
--- when using the Clerk JWT template for Supabase.
+-- RLS uses (auth.jwt() ->> 'sub') which Clerk sets to the user ID
+-- automatically — no sub claim override needed in the JWT template.
 -- ============================================================
 
--- Helper: returns the Clerk user ID from the active JWT
-CREATE OR REPLACE FUNCTION auth.user_id()
-RETURNS TEXT
-LANGUAGE sql STABLE
-AS $$ SELECT auth.jwt() ->> 'sub' $$;
-
--- Helper: auto-update updated_at
+-- Helper: auto-update updated_at (goes in public schema — no permission issue)
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$;
@@ -42,22 +36,24 @@ CREATE TABLE users_profile (
 CREATE TRIGGER users_profile_updated_at BEFORE UPDATE ON users_profile
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE users_profile ENABLE ROW LEVEL SECURITY;
-CREATE POLICY up_all ON users_profile FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY up_all ON users_profile FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 2. semesters ─────────────────────────────────────────────
 CREATE TABLE semesters (
-  id         UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    TEXT           NOT NULL,
-  name       TEXT           NOT NULL,
+  id         UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    TEXT            NOT NULL,
+  name       TEXT            NOT NULL,
   season     semester_season NOT NULL,
-  year       INT            NOT NULL,
-  start_date DATE           NOT NULL,
-  end_date   DATE           NOT NULL,
-  is_current BOOLEAN        NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+  year       INT             NOT NULL,
+  start_date DATE            NOT NULL,
+  end_date   DATE            NOT NULL,
+  is_current BOOLEAN         NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 ALTER TABLE semesters ENABLE ROW LEVEL SECURITY;
-CREATE POLICY sem_all ON semesters FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY sem_all ON semesters FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 3. projects ──────────────────────────────────────────────
 CREATE TABLE projects (
@@ -73,7 +69,8 @@ CREATE TABLE projects (
 CREATE TRIGGER projects_updated_at BEFORE UPDATE ON projects
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY proj_all ON projects FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY proj_all ON projects FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 4. courses ───────────────────────────────────────────────
 CREATE TABLE courses (
@@ -89,7 +86,8 @@ CREATE TABLE courses (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
-CREATE POLICY crs_all ON courses FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY crs_all ON courses FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 5. assignments ───────────────────────────────────────────
 CREATE TABLE assignments (
@@ -108,7 +106,8 @@ CREATE TABLE assignments (
 CREATE TRIGGER asgn_updated_at BEFORE UPDATE ON assignments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY asgn_all ON assignments FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY asgn_all ON assignments FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 6. tasks ─────────────────────────────────────────────────
 CREATE TABLE tasks (
@@ -129,13 +128,14 @@ CREATE TABLE tasks (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX tasks_user_status_idx ON tasks(user_id, status);
+CREATE INDEX tasks_user_status_idx  ON tasks(user_id, status);
 CREATE INDEX tasks_user_starred_idx ON tasks(user_id, is_starred) WHERE status = 'active';
-CREATE INDEX tasks_user_due_idx ON tasks(user_id, due_at) WHERE status = 'active';
+CREATE INDEX tasks_user_due_idx     ON tasks(user_id, due_at)      WHERE status = 'active';
 CREATE TRIGGER tasks_updated_at BEFORE UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY tasks_all ON tasks FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY tasks_all ON tasks FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 7. people ────────────────────────────────────────────────
 CREATE TABLE people (
@@ -152,19 +152,21 @@ CREATE TABLE people (
 CREATE TRIGGER people_updated_at BEFORE UPDATE ON people
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE people ENABLE ROW LEVEL SECURITY;
-CREATE POLICY people_all ON people FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY people_all ON people FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 8. task_assignments ──────────────────────────────────────
 CREATE TABLE task_assignments (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
-  task_id    UUID NOT NULL REFERENCES tasks ON DELETE CASCADE,
-  person_id  UUID NOT NULL REFERENCES people ON DELETE CASCADE,
+  task_id    UUID NOT NULL REFERENCES tasks    ON DELETE CASCADE,
+  person_id  UUID NOT NULL REFERENCES people   ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(task_id, person_id)
 );
 ALTER TABLE task_assignments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ta_all ON task_assignments FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY ta_all ON task_assignments FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 9. calendar_accounts ─────────────────────────────────────
 CREATE TABLE calendar_accounts (
@@ -183,7 +185,8 @@ CREATE TABLE calendar_accounts (
 CREATE TRIGGER cal_updated_at BEFORE UPDATE ON calendar_accounts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE calendar_accounts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY cal_all ON calendar_accounts FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY cal_all ON calendar_accounts FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 10. events ───────────────────────────────────────────────
 CREATE TABLE events (
@@ -195,7 +198,7 @@ CREATE TABLE events (
   location            TEXT,
   start_at            TIMESTAMPTZ NOT NULL,
   end_at              TIMESTAMPTZ NOT NULL,
-  is_all_day          BOOLEAN NOT NULL DEFAULT FALSE,
+  is_all_day          BOOLEAN     NOT NULL DEFAULT FALSE,
   recurrence_rule     TEXT,
   external_id         TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -205,7 +208,8 @@ CREATE INDEX events_user_start_idx ON events(user_id, start_at);
 CREATE TRIGGER events_updated_at BEFORE UPDATE ON events
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY events_all ON events FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY events_all ON events FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 11. financial_accounts ───────────────────────────────────
 CREATE TABLE financial_accounts (
@@ -216,7 +220,7 @@ CREATE TABLE financial_accounts (
   institution      TEXT,
   plaid_account_id TEXT,
   current_balance  NUMERIC(14,2),
-  currency         TEXT NOT NULL DEFAULT 'USD',
+  currency         TEXT    NOT NULL DEFAULT 'USD',
   is_active        BOOLEAN NOT NULL DEFAULT TRUE,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -224,7 +228,8 @@ CREATE TABLE financial_accounts (
 CREATE TRIGGER fa_updated_at BEFORE UPDATE ON financial_accounts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE financial_accounts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY fa_all ON financial_accounts FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY fa_all ON financial_accounts FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 12. transactions ─────────────────────────────────────────
 CREATE TABLE transactions (
@@ -244,7 +249,8 @@ CREATE TABLE transactions (
 );
 CREATE INDEX txn_user_date_idx ON transactions(user_id, date DESC);
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY txn_all ON transactions FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY txn_all ON transactions FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 13. budgets ──────────────────────────────────────────────
 CREATE TABLE budgets (
@@ -260,23 +266,25 @@ CREATE TABLE budgets (
 CREATE TRIGGER budgets_updated_at BEFORE UPDATE ON budgets
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY budgets_all ON budgets FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY budgets_all ON budgets FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 14. paycheck_schedules ───────────────────────────────────
 CREATE TABLE paycheck_schedules (
-  id            UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       TEXT  NOT NULL,
-  employer      TEXT  NOT NULL,
-  frequency     TEXT  NOT NULL DEFAULT 'biweekly',
-  day_of_week   INT,
-  anchor_date   DATE  NOT NULL,
-  amount        NUMERIC(12,2),
-  currency      TEXT  NOT NULL DEFAULT 'USD',
-  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id          UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     TEXT  NOT NULL,
+  employer    TEXT  NOT NULL,
+  frequency   TEXT  NOT NULL DEFAULT 'biweekly',
+  day_of_week INT,
+  anchor_date DATE  NOT NULL,
+  amount      NUMERIC(12,2),
+  currency    TEXT  NOT NULL DEFAULT 'USD',
+  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE paycheck_schedules ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ps_all ON paycheck_schedules FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY ps_all ON paycheck_schedules FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 15. habits ───────────────────────────────────────────────
 CREATE TABLE habits (
@@ -294,7 +302,8 @@ CREATE TABLE habits (
 CREATE TRIGGER habits_updated_at BEFORE UPDATE ON habits
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
-CREATE POLICY habits_all ON habits FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY habits_all ON habits FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 16. habit_logs ───────────────────────────────────────────
 CREATE TABLE habit_logs (
@@ -307,27 +316,29 @@ CREATE TABLE habit_logs (
   UNIQUE(habit_id, completed_on)
 );
 ALTER TABLE habit_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY hl_all ON habit_logs FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY hl_all ON habit_logs FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 17. goals ────────────────────────────────────────────────
 CREATE TABLE goals (
-  id             UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id        TEXT          NOT NULL,
-  title          TEXT          NOT NULL,
+  id             UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        TEXT           NOT NULL,
+  title          TEXT           NOT NULL,
   description    TEXT,
   category       TEXT,
   timeframe      goal_timeframe NOT NULL DEFAULT 'monthly',
   target_date    DATE,
-  status         goal_status   NOT NULL DEFAULT 'active',
-  progress_pct   INT           NOT NULL DEFAULT 0,
-  parent_goal_id UUID          REFERENCES goals ON DELETE SET NULL,
-  created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-  updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  status         goal_status    NOT NULL DEFAULT 'active',
+  progress_pct   INT            NOT NULL DEFAULT 0,
+  parent_goal_id UUID           REFERENCES goals ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 CREATE TRIGGER goals_updated_at BEFORE UPDATE ON goals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY goals_all ON goals FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY goals_all ON goals FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 18. goal_milestones ──────────────────────────────────────
 CREATE TABLE goal_milestones (
@@ -335,13 +346,14 @@ CREATE TABLE goal_milestones (
   user_id      TEXT  NOT NULL,
   goal_id      UUID  NOT NULL REFERENCES goals ON DELETE CASCADE,
   title        TEXT  NOT NULL,
-  is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  is_completed BOOLEAN     NOT NULL DEFAULT FALSE,
   completed_at TIMESTAMPTZ,
   due_at       TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE goal_milestones ENABLE ROW LEVEL SECURITY;
-CREATE POLICY gm_all ON goal_milestones FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY gm_all ON goal_milestones FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 19. journal_entries ──────────────────────────────────────
 CREATE TABLE journal_entries (
@@ -351,7 +363,7 @@ CREATE TABLE journal_entries (
   mood       INT   CHECK (mood BETWEEN 1 AND 5),
   mood_label TEXT,
   tags       TEXT[] NOT NULL DEFAULT '{}',
-  entry_date DATE  NOT NULL,
+  entry_date DATE   NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -359,7 +371,8 @@ CREATE INDEX je_user_date_idx ON journal_entries(user_id, entry_date DESC);
 CREATE TRIGGER je_updated_at BEFORE UPDATE ON journal_entries
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
-CREATE POLICY je_all ON journal_entries FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY je_all ON journal_entries FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 20. health_logs ──────────────────────────────────────────
 CREATE TABLE health_logs (
@@ -373,7 +386,8 @@ CREATE TABLE health_logs (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE health_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY hlth_all ON health_logs FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY hlth_all ON health_logs FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 21. sleep_logs ───────────────────────────────────────────
 CREATE TABLE sleep_logs (
@@ -388,7 +402,8 @@ CREATE TABLE sleep_logs (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE sleep_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY sl_all ON sleep_logs FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY sl_all ON sleep_logs FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 22. job_applications ─────────────────────────────────────
 CREATE TABLE job_applications (
@@ -411,7 +426,8 @@ CREATE TABLE job_applications (
 CREATE TRIGGER ja_updated_at BEFORE UPDATE ON job_applications
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ja_all ON job_applications FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY ja_all ON job_applications FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 23. application_contacts ─────────────────────────────────
 CREATE TABLE application_contacts (
@@ -426,7 +442,8 @@ CREATE TABLE application_contacts (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE application_contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ac_all ON application_contacts FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY ac_all ON application_contacts FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 24. notes ────────────────────────────────────────────────
 CREATE TABLE notes (
@@ -435,8 +452,8 @@ CREATE TABLE notes (
   title          TEXT,
   content        TEXT  NOT NULL,
   tags           TEXT[] NOT NULL DEFAULT '{}',
-  source         TEXT  NOT NULL DEFAULT 'manual',
-  parent_note_id UUID  REFERENCES notes ON DELETE SET NULL,
+  source         TEXT   NOT NULL DEFAULT 'manual',
+  parent_note_id UUID   REFERENCES notes ON DELETE SET NULL,
   is_pinned      BOOLEAN NOT NULL DEFAULT FALSE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -444,19 +461,21 @@ CREATE TABLE notes (
 CREATE TRIGGER notes_updated_at BEFORE UPDATE ON notes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY notes_all ON notes FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY notes_all ON notes FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 25. note_links ───────────────────────────────────────────
 CREATE TABLE note_links (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      TEXT NOT NULL,
-  source_id    UUID NOT NULL REFERENCES notes ON DELETE CASCADE,
-  target_id    UUID NOT NULL REFERENCES notes ON DELETE CASCADE,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    TEXT NOT NULL,
+  source_id  UUID NOT NULL REFERENCES notes ON DELETE CASCADE,
+  target_id  UUID NOT NULL REFERENCES notes ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(source_id, target_id)
 );
 ALTER TABLE note_links ENABLE ROW LEVEL SECURITY;
-CREATE POLICY nl_all ON note_links FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY nl_all ON note_links FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
 
 -- ── 26. recurring_transactions ───────────────────────────────
 CREATE TABLE recurring_transactions (
@@ -476,4 +495,5 @@ CREATE TABLE recurring_transactions (
 CREATE TRIGGER rt_updated_at BEFORE UPDATE ON recurring_transactions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ALTER TABLE recurring_transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rt_all ON recurring_transactions FOR ALL USING (auth.user_id() = user_id);
+CREATE POLICY rt_all ON recurring_transactions FOR ALL
+  USING ((auth.jwt() ->> 'sub') = user_id);
