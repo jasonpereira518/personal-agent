@@ -17,4 +17,4 @@ CREATE INDEX capture_log_user_idx ON capture_webhook_log(user_id, created_at DES
 ALTER TABLE capture_webhook_log ENABLE ROW LEVEL SECURITY;
 -- Users can read their own logs; webhook inserts via service role (bypasses RLS)
 CREATE POLICY cwl_select ON capture_webhook_log
-  FOR SELECT USING (auth.user_id() = user_id);
+  FOR SELECT USING ((auth.jwt() ->> 'sub') = user_id);
